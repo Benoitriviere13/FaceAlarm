@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FaceWatch - Caméras</title>
+  <style>
+    video-box { display: inline-block; margin: 10px; }
+    img { max-width: 100%; border: 2px solid #aaa; }
+  </style>
+</head>
+<body>
+  <h1>Visualisation des flux</h1>
+  {% for i in range(1, cam_count+1) %}
+    <div class="video-box">
+      <h3>Caméra {{ i }}</h3>
+      <img src="http://yolo-detector:5000/video_feed_cam{{ i }}" alt="Cam {{ i }}">
+    </div>
+  {% endfor %}
+</body>
+</html>

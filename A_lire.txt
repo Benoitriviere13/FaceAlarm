@@ -1,0 +1,31 @@
+
+
+
+----------------------------------------------------------------------------------
+GIT
+----------------------------------------------------------------------------------
+
+# Étape 1 : S'assurer qu'on est dans le bon dossier
+cd ~/facewatch-system
+
+# Étape 2 : Ajouter les fichiers
+git add .
+
+# Étape 3 : Créer un premier commit
+git commit -m "Premier commit FaceAlarm"
+
+# Étape 4 : Créer la branche main et la lier à l'origin
+git branch -M main
+
+# Étape 5 : (si pas déjà fait) Associer au dépôt distant
+git remote add origin https://github.com/Benoitriviere13/FaceAlarm.git  # À refaire seulement si tu l’as supprimée
+
+# Étape 6 : Pousser vers GitHub
+git push -u origin main
+
+
+
+----------------------------------------------------------------------------------
+TEST MYSQL DEPIUS LE Hote
+----------------------------------------------------------------------------------
+mysql -h 127.0.0.1 -P 13336 -u admin -p

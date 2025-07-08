@@ -1,0 +1,82 @@
+version: "3.9"
+
+services:
+  mysql-db:
+    image: mysql:8
+    container_name: mysql-db
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - db-data:/var/lib/mysql
+    ports:
+      - "13336:3306"
+
+  ftp-server:
+    image: stilliard/pure-ftpd
+    container_name: ftp-server
+    restart: always
+    ports:
+      - "21:21"
+      - "30000-30009:30000-30009"
+    environment:
+      PUBLICHOST: "localhost"
+    volumes:
+      - ./ftp-storage/data:/home/ftpusers/${FTP_USER}
+    command: /usr/sbin/pure-ftpd -l puredb:/etc/pure-ftpd/pureftpd.pdb -E -j -R -P localhost -p 30000:30009
+
+  yolo-detector:
+    build: ./yolo-detector
+    container_name: yolo-detector
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5007:5000"  # Ajouté pour le MJPEG
+    volumes:
+      - ./shared/images:/app/images
+      - ./yolo-detector:/app
+
+    depends_on:
+      - ftp-server
+
+  face-recognition:
+    build: ./face-recognition
+    container_name: face-recognition
+    restart: "no"
+    env_file:
+      - .env
+    volumes:
+      - ./shared/images:/app/images
+    depends_on:
+      - mysql-db
+
+  web-interface:
+    build: ./web-interface
+    container_name: web-interface
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8007:8000"
+    volumes:
+      - ./shared/images:/app/images
+    depends_on:
+      - mysql-db
+      - ftp-server
+      - face-recognition
+
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: always
+
+volumes:
+  db-data:
