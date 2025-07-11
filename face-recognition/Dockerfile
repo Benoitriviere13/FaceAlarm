@@ -20,5 +20,6 @@ RUN pip install --no-cache-dir \
 
 RUN mkdir -p /app/images/faces_unknown
 
-CMD ["python", "-u", "recognizer.py"]
+#CMD ["python", "-u", "recognizer.py"]
+CMD ["tail", "-f", "/dev/null"]
 

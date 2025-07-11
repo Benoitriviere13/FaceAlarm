@@ -49,11 +49,12 @@ services:
   face-recognition:
     build: ./face-recognition
     container_name: face-recognition
-    restart: "no"
+    restart: always
     env_file:
       - .env
     volumes:
       - ./shared/images:/app/images
+      - ./face-recognition:/app
     depends_on:
       - mysql-db
 

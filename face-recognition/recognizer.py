@@ -1,84 +1,70 @@
 import os
+import shutil
+import time
 import pickle
 import face_recognition
-import mysql.connector
-from dotenv import load_dotenv
-from datetime import datetime
-from pathlib import Path
-import cv2
 
 
-print("=== DEMARRAGE DU SCRIPT ===")
 
-load_dotenv()
+# Répertoires et chemins
+BASE_DIR = "/app"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PKL_FILE = os.path.join(BASE_DIR, "known_faces.pkl")
+CAPTURE_DIR = os.path.join(BASE_DIR, "images", "captures")
+FACES_UNKNOWN_DIR = os.path.join(BASE_DIR, "images", "faces_unknown")
 
-# Dossiers
-CAPTURE_DIR = "/app/images/captures"
-UNKNOWN_DIR = "/app/images/faces_unknown"
+# Créer le dossier faces_unknown s'il n'existe pas
+os.makedirs(FACES_UNKNOWN_DIR, exist_ok=True)
 
-os.makedirs(UNKNOWN_DIR, exist_ok=True)
+# Chargement des visages connus
+if not os.path.exists(PKL_FILE):
+    print("❌ Fichier 'encodings.pkl' introuvable.")
+    exit(1)
 
-# Connexion MySQL
-conn = mysql.connector.connect(
-    host=os.getenv("MYSQL_HOST", "mysql-db"),
-    user=os.getenv("MYSQL_USER"),
-    password=os.getenv("MYSQL_PASSWORD"),
-    database=os.getenv("MYSQL_DATABASE")
-)
-cursor = conn.cursor()
+with open(PKL_FILE, "rb") as f:
+    data = pickle.load(f)
+    known_encodings = data["encodings"]
+    known_names = data["names"]
 
-# Charger tous les visages connus (encodages en BLOB -> vecteurs)
-cursor.execute("SELECT id, name, encoding FROM faces")
-known_faces = []
-for face_id, name, encoding_blob in cursor.fetchall():
-    encoding = pickle.loads(encoding_blob)
-    known_faces.append((face_id, name, encoding))
+print(f"✅ {len(known_names)} visages connus chargés.")
 
-print(f"✅ {len(known_faces)} visages connus chargés.")
+# Fonction de traitement
+def traiter_images():
+    images = [f for f in os.listdir(CAPTURE_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+    if not images:
+        print("📂 Aucune image à traiter.")
+        return
 
-# Parcours des images à traiter
-for filename in os.listdir(CAPTURE_DIR):
-    path = os.path.join(CAPTURE_DIR, filename)
-    if not filename.lower().endswith(".jpg"):
-        continue
+    for image_name in images:
+        image_path = os.path.join(CAPTURE_DIR, image_name)
+        print(f"\n📸 Traitement : {image_name}")
 
-    print(f"📸 Traitement de {filename}")
-    image = face_recognition.load_image_file(path)
-    locations = face_recognition.face_locations(image)
-    encodings = face_recognition.face_encodings(image, locations)
+        image = face_recognition.load_image_file(image_path)
+        face_locations = face_recognition.face_locations(image)
+        face_encodings = face_recognition.face_encodings(image, face_locations)
 
-    if len(encodings) == 0:
-        print(f"⚠️ Aucun visage détecté dans {filename}")
-        continue
+        if not face_encodings:
+            print("⚠️ Aucun visage détecté.")
+            continue
 
-    # On ne traite que le 1er visage par image
-    encoding = encodings[0]
-    distances = [face_recognition.face_distance([k[2]], encoding)[0] for k in known_faces]
+        match_found = False
+        for i, face_encoding in enumerate(face_encodings):
+            matches = face_recognition.compare_faces(known_encodings, face_encoding, tolerance=0.5)
+            if True in matches:
+                matched_index = matches.index(True)
+                matched_name = known_names[matched_index]
+                print(f"   ✅ Visage reconnu : {matched_name}. Suppression de l'image.")
+                match_found = True
+                break
 
-    if distances and min(distances) < 0.45:
-        best_index = distances.index(min(distances))
-        best_id, best_name, _ = known_faces[best_index]
-        confidence = 1.0 - distances[best_index]
-        print(f"✅ Visage reconnu : {best_name} (conf={confidence:.2f})")
+        if match_found:
+            os.remove(image_path)
+        else:
+            print(f"   ❓ Aucun visage reconnu. Déplacement dans 'faces_unknown'.")
+            shutil.move(image_path, os.path.join(FACES_UNKNOWN_DIR, image_name))
 
-        cursor.execute("""
-            INSERT INTO detections (face_id, cam_id, image_path, match_confidence, is_unknown)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (best_id, 1, path, distances[best_index], False))
-
-    else:
-        print("❓ Visage inconnu, enregistrement comme inconnu.")
-        new_path = os.path.join(UNKNOWN_DIR, filename)
-        os.rename(path, new_path)
-
-        cursor.execute("""
-            INSERT INTO detections (face_id, cam_id, image_path, match_confidence, is_unknown)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (None, 1, new_path, None, True))
-
-    conn.commit()
-
-# Nettoyage
-cursor.close()
-conn.close()
-print("🧼 Traitement terminé.")
+# Boucle toutes les 2 minutes
+print("⏳ Démarrage du script de reconnaissance toutes les 2 minutes...")
+while True:
+    traiter_images()
+    time.sleep(120)

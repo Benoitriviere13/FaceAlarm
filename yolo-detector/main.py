@@ -3,31 +3,28 @@ import cv2
 import time
 import threading
 from datetime import datetime
-from flask import Flask, Response
 from ultralytics import YOLO
 from dotenv import load_dotenv
 
 # Charger les variables d'environnement
 load_dotenv()
 
-# URLs des caméras
+# URLs des caméras (RTSP_URL_1 à RTSP_URL_5)
 rtsp_urls = [os.getenv(f"RTSP_URL_{i}") for i in range(1, 6)]
 rtsp_urls = [url for url in rtsp_urls if url]
 
-# Modèle YOLO
+# Modèle YOLO pour détection de visages
 model = YOLO("yolov8n-face.pt")
 
-# Répertoire des captures
+# Dossier de sauvegarde des visages capturés
 CAPTURE_DIR = "/app/images/captures"
 os.makedirs(CAPTURE_DIR, exist_ok=True)
 
-# Flask App
-app = Flask(__name__)
-frame_buffers = [None for _ in rtsp_urls]
+# Suivi du temps de dernière capture
 last_capture_time = {}
-MIN_INTERVAL = 10  # secondes
+MIN_INTERVAL = 5  # secondes
 
-# Traitement YOLO par caméra (avec reconnect RTSP)
+# Traitement YOLO pour une caméra
 def process_camera(idx, url):
     print(f"[CAM {idx+1}] ✅ Démarrée")
 
@@ -40,7 +37,6 @@ def process_camera(idx, url):
             time.sleep(5)
             continue
 
-        # Lire une frame fraîche (évite les frames en retard)
         ret, frame = cap.read()
         cap.release()
 
@@ -48,16 +44,13 @@ def process_camera(idx, url):
             print(f"[CAM {idx+1}] ⚠️ Frame non lue")
             continue
 
-        # Détection YOLO
         results = model(frame, conf=0.3, verbose=False)
-        annotated = results[0].plot()
         boxes = results[0].boxes
-        
+
         now = time.time()
         last_time = last_capture_time.get(idx, 0)
-        print(now - last_time)
+
         if now - last_time >= MIN_INTERVAL:
-            print("gogogo")
             for i, box in enumerate(boxes):
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 x1 = max(x1 - 20, 0)
@@ -74,38 +67,15 @@ def process_camera(idx, url):
                 filename = f"cam{idx+1}_face{i}_{ts}_conf{conf_str}.jpg"
                 cv2.imwrite(os.path.join(CAPTURE_DIR, filename), crop)
                 print(f"[CAM {idx+1}] 📸 Visage capturé : {filename}")
-                last_capture_time[idx] = now
-           
+
+            last_capture_time[idx] = now
         else:
             print(f"[CAM {idx+1}] ⏳ Trop tôt pour une nouvelle capture")
 
-        # MJPEG buffer
-        _, jpeg = cv2.imencode(".jpg", annotated)
-        frame_buffers[idx] = jpeg.tobytes()
-
-# Lancer un thread pour chaque caméra
+# Démarrer un thread pour chaque caméra
 for i, url in enumerate(rtsp_urls):
     threading.Thread(target=process_camera, args=(i, url), daemon=True).start()
 
-# Routes Flask
-@app.route("/")
-def index():
-    return "<h2>Flux caméras</h2>" + "".join(
-        [f"<h3>Cam {i+1}</h3><img src='/video_feed_cam{i+1}'><br>" for i in range(len(rtsp_urls))]
-    )
-
-@app.route("/video_feed_cam<int:cam_id>")
-def video_feed(cam_id):
-    def generate():
-        while True:
-            frame = frame_buffers[cam_id - 1]
-            if frame:
-                yield (b"--frame\r\n"
-                       b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
-            else:
-                time.sleep(0.1)
-    return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
-
-# Lancement Flask
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+# Garder le script vivant
+while True:
+    time.sleep(60)
