@@ -22,7 +22,7 @@ os.makedirs(CAPTURE_DIR, exist_ok=True)
 
 # Suivi du temps de dernière capture
 last_capture_time = {}
-MIN_INTERVAL = 5  # secondes
+MIN_INTERVAL = 2  # secondes
 
 # Traitement YOLO pour une caméra
 def process_camera(idx, url):
@@ -78,4 +78,4 @@ for i, url in enumerate(rtsp_urls):
 
 # Garder le script vivant
 while True:
-    time.sleep(60)
+    time.sleep(20)
